@@ -1,15 +1,3 @@
-/*
--Esta versión mejorada utiliza la función path.join para crear rutas de archivo y carpeta de
- manera más segura y portátil. 
- -Además, se corrigió el problema de la instalación de express-handlebars 
- cuando opViews es true. Ahora, las dependencias se instalan solo cuando sea necesario.
- -Tambien envuelve todo el proceso en un bloque try-catch, lo que permite capturar cualquier excepción que pueda ocurrir 
- durante la ejecución y mostrar un mensaje de error significativo
- -Consulta al usuario que dependencias instalar
- -Utiliza async/await y maneja errores de manera adecuada para proporcionar una experiencia de usuario más robusta y 
- mantener el flujo correcto del programa.
- */
-
 
 const fs = require('fs').promises;
 const { exec } = require('child_process');
@@ -29,7 +17,15 @@ const projectQuestion = {
   },
 };
 
-// Opciones de instalación de user y opProducts
+const reactProjectQuestion = {
+  type: 'confirm',
+  name: 'opReactProject',
+  message: '¿Deseas crear un proyecto de React?',
+  default: true,
+  when: (answers) => !answers.opInstallAutomatically,
+};
+
+// Opciones de instalación de user y Products
 const questions = [
   projectQuestion,
 
@@ -78,7 +74,10 @@ const questions = [
     default: true,
     when: (answers) => !answers.opInstallAutomatically,
   },
+  reactProjectQuestion,
 ];
+
+
 
 // Función para ejecutar comandos de forma asíncrona
 function execCommand(command) {
@@ -119,14 +118,14 @@ async function createAppFile(projectDir, opViews, opRouters, opProducts, opUsers
       app.use(express.urlencoded({ extended: true }));
       ${hdbApp}
       app.use('/api/products', productRouter);
-      app.use('/api/users', opUsers ? userRouter : express.Router());
+      app.use('/api/users',  userRouter);
 
 // Ruta de inicio
     app.get('/', (req, res) => {
       res.render('index', { title: 'Bienvenido a mi proyecto' });
     });
 
-    app.listen(8080, () => console.log('Server Up'));`;
+    app.listen(8080, () => console.log('Server Up in port 8080'));`;
 
     await fs.writeFile(path.join(projectDir, 'src/app.js'), appJsCode);
 
@@ -157,11 +156,10 @@ async function getUserById(req, res) {
 }
 
 // Exportar las funciones del controlador
-module.exports = {
-  getAllUsers,
-  getUserById,
+export default
+  getAllUsers
+  getUserById
   // Agregar aquí más funciones del controlador según sea necesario
-};
 `;
     await fs.writeFile(path.join(controllerDir, 'user.controller.js'), userJsCode);
 
@@ -192,11 +190,10 @@ async function getProductById(req, res) {
 }
 
 // Exportar las funciones del controlador
-module.exports = {
-  getAllProducts,
-  getProductById,
+export default
+  getAllProducts
+  getProductById
   // Agregar aquí más funciones del controlador según sea necesario
-};
 `;
     await fs.writeFile(path.join(controllerDir, 'product.controller.js'), productJsCode);
 
@@ -220,7 +217,8 @@ async function createRoutes(projectDir, opRouters, opProducts, opUsers) {
     const productRouter = express.Router();
 
 // Importar el controlador de productos
-    import { getAllProducts, getProductById } from '../controllers/product.controller.js';
+    import getAllProducts from '../controllers/product.controller.js';
+    import getProductById from '../controllers/product.controller.js';
 
 // Definir ruta para obtener todos los productos
     productRouter.get('/', getAllProducts);
@@ -242,7 +240,8 @@ import express from 'express';
 const userRouter = express.Router();
 
 // Importar el controlador de usuarios
-import { getAllUsers, getUserById } from '../controllers/user.controller.js';
+import getAllUsers from '../controllers/user.controller.js';
+import getUserById from '../controllers/user.controller.js';
 
 // Definir ruta para obtener todos los usuarios
 userRouter.get('/', getAllUsers);
@@ -284,7 +283,7 @@ const productSchema = new mongoose.Schema({
 
 const Product = mongoose.model('Product', productSchema);
 
-module.exports = Product;
+export default  Product;
 `;
       await fs.writeFile(path.join(modelsDir, 'product.model.js'), productModelJsCode);
 
@@ -296,7 +295,7 @@ module.exports = Product;
 
 // Definir el esquema de Usuarios y las operaciones relacionadas
 
-const mongoose = require('mongoose');
+import mongoose from mongoose;
 
 const userSchema = new mongoose.Schema({
   // Agregar aquí las definiciones del esquema de usuarios
@@ -304,7 +303,7 @@ const userSchema = new mongoose.Schema({
 
 const User = mongoose.model('User', userSchema);
 
-module.exports = User;
+export default  User;
 `;
       await fs.writeFile(path.join(modelsDir, 'user.model.js'), userModelJsCode);
 
@@ -322,7 +321,8 @@ async function createViews(projectDir, opViews) {
 
     const viewsDir = path.join(projectDir, 'src/views');
     await fs.access(viewsDir).catch(() => fs.mkdir(viewsDir));
-    await fs.mkdir(path.join(viewsDir, 'layouts'));
+    const layoutsDir = path.join(viewsDir, 'layouts');
+    await fs.access(layoutsDir).catch(() => fs.mkdir(layoutsDir));
 
     // Crear archivo de vista de inicio con contenido inicial
     await fs.writeFile(
@@ -336,10 +336,70 @@ async function createViews(projectDir, opViews) {
   }
 }
 
-// Función para crear el proyecto
-async function createProject() {
+
+async function installReactDependencies(projectDir, opReactProject) {
   try {
-    // Obtener el nombre del proyecto
+    if (!opReactProject) {
+      console.log('Se ha omitido la creación del proyecto de React.');
+      return;
+    }
+
+    process.chdir(projectDir);
+
+    // Ejecutar `npx create-react-app .`
+    await execCommand('npx create-react-app my-app');
+    
+    // Instalar dependencia axios
+    await execCommand('npm install axios');
+    
+    // Actualizar package.json con el proxy
+    const packageJsonPath = 'package.json';
+    const packageJsonContent = await fs.readFile(packageJsonPath, 'utf-8');
+    const packageJsonObject = JSON.parse(packageJsonContent);
+    packageJsonObject.proxy = 'http://localhost:8080';
+    await fs.writeFile(packageJsonPath, JSON.stringify(packageJsonObject, null, 2));
+
+    console.log('El proyecto de React ha sido creado y configurado exitosamente.');
+  } catch (error) {
+    console.error('Ha ocurrido un error durante la instalación de dependencias de React:', error);
+    throw error;
+  }
+}
+
+async function createPublicFolder(projectDir) {
+  try {
+    const publicDir = path.join(projectDir, 'public');
+    
+    // Verificar si el directorio 'public' ya existe
+    await fs.access(publicDir).catch(() => fs.mkdir(publicDir));
+
+    const indexHtmlContent = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bienvenido a mi proyecto</title>
+</head>
+<body>
+  <div id="root"></div>
+  <script src="../src/views/index.js"></script>
+</body>
+</html>`;
+
+    await fs.writeFile(path.join(publicDir, 'index.html'), indexHtmlContent);
+
+    console.log('La carpeta pública con el archivo index.html ha sido creada con éxito.');
+  } catch (error) {
+    console.error('Ha ocurrido un error al crear la carpeta pública y el archivo index.html:', error);
+    throw error;
+  }
+}
+
+
+// Función para crear el proyecto Express
+async function createExpressProject() {
+  try {
+    // Obtener respuestas del usuario
     const { projectName, ...options } = await inquirer.prompt(questions);
     const projectDir = path.join(__dirname, projectName.trim());
 
@@ -357,13 +417,13 @@ async function createProject() {
     const packageJsonPath = 'package.json';
     const packageJsonContent = await fs.readFile(packageJsonPath, 'utf-8');
     const packageJsonObject = JSON.parse(packageJsonContent);
-    packageJsonObject.type = 'module';
     packageJsonObject.main = 'src/app.js';
+    packageJsonObject.type = 'module';
     packageJsonObject.scripts.start = 'node .';
     packageJsonObject.scripts.dev = 'nodemon .';
     await fs.writeFile(packageJsonPath, JSON.stringify(packageJsonObject, null, 2));
 
-    console.log('El archivo package.json ha sido actualizado con éxito.');
+    console.log('El proyecto Express ha sido creado exitosamente.');
 
     // Create src folder
     await fs.mkdir(path.join(projectDir, 'src'));
@@ -389,13 +449,16 @@ async function createProject() {
 
     // Create app.js with content
     await createAppFile(projectDir, options.opViews, options.opRouters, options.opProducts, options.opUsers);
-
-    console.log('El proyecto ha sido creado exitosamente.');
+    
+    
+    console.log('El proyecto Express ha sido configurado exitosamente. Ejecute npm run dev.');
+    installReactDependencies(projectDir);
   } catch (error) {
-    console.error('Ha ocurrido un error durante la creación del proyecto:', error);
+    console.error('Ha ocurrido un error durante la creación del proyecto Express:', error);
     throw error;
   }
 }
 
-// Llamar a la función para crear el proyecto
-createProject();
+
+// Llamar a las funciones por separado
+createExpressProject()
